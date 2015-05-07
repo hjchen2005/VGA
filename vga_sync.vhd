@@ -14,8 +14,8 @@ end vga_sync;
 architecture arch of vga_sync is
 constant HD: integer:=640;
 constant HF: integer:=16;
-constant HB: integer:48;
-constant HR: integer:96;
+constant HB: integer:=48;
+constant HR: integer:=96;
 constant VD: integer:=480;
 constant VF: integer:=11;
 constant vb: integer:=31;
@@ -45,3 +45,9 @@ begin
       current_h_sync <=next_h_sync;
       end if;
     end process;
+
+next_mod2 <= not current_mod2;
+pixel_tick <= '1' when current_mod2='1' else '0';
+h_end <= '1' when current_h_count=(HD+HF+HB+HR-1) else '0';
+v_end <= '1' when current_v_count=(VD+VF+VB+VR-1) else '0';
+
