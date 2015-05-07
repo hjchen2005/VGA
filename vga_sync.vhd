@@ -4,113 +4,84 @@ use ieee.numeric_std.all;
 entity vga_sync is
 port(
 clk, reset: in std_logic;
-hsync, vsync: out std_logic;
-video_on, p_tick: out std_logic;
-pixel_x, pixel_y: out std_logic_vector (9 downto 0)
+hsync , vsync : out std_logic ;
+video_on: out std_logic;
+pixel_x , pixel_y : out std_logic_vector (9 downto 0)
 );
 end vga_sync;
 architecture arch of vga_sync is
--- VGA 640-by-480 sync parameters
-constant HD: integer:=640; --horizontal display area
-constant HF: integer:=16 ; --h. front porch
-constant HB: integer:=48 ; --h. back porch
-constant HR: integer:=96 ; --h. retrace
-constant VD: integer:=480; --vertical display area
-constant VF: integer:=10; --v. front porch
-constant VB: integer:=33; --v. back porch
-constant VR: integer:=2; --v. retrace
-constant TK: integer :=16000;
-constant O_TK: integer :=25175;
-constant S_HD: integer:=HD*TK/O_TK; --horizontal display area
-constant S_HF: integer:=HF*TK/O_TK ; --h. front porch
-constant S_HB: integer:=HB*TK/O_TK ; --h. back porch
-constant S_HR: integer:=HR*TK/O_TK; --h. retrace
-constant S_VD: integer:=VD*TK/O_TK; --vertical display area
-constant S_VF: integer:=VF*TK/O_TK; --v. front porch
-constant S_VB: integer:=VB*TK/O_TK; --v. back porch
-constant S_VR: integer:=VR*TK/O_TK; --v. retrace
--- mod-2 counter
-signal mod2_reg, mod2_next: std_logic;
--- sync counters
-signal v_count_reg, v_count_next: unsigned(9 downto 0);
-signal h_count_reg, h_count_next: unsigned(9 downto 0);
--- output buffer
-signal v_sync_reg, h_sync_reg: std_logic;
-signal v_sync_next, h_sync_next: std_logic;
--- status signal
-signal h_end, v_end, pixel_tick: std_logic;
+constant HD: integer := 640; --horizontal display area
+constant HF: integer:= 16 ; --h. front porch
+constant HB: integer:= 48 ; --h. back porch
+constant HR: integer:= 96 ; --h. retrace
+constant VD: integer := 480; --vertical display area
+constant VF: integer:= 11; -- v. front porch
+constant VB: integer := 31; -- v. back porch
+constant VR: integer := 2; -- v. retrace
+signal current_mod2, next_mod2 : std_logic;
+signal current_v_count , next_v_count : unsigned(9 downto 0);
+signal current_h_count , next_h_count : unsigned (9 downto 0);
+signal current_v_sync , current_h_sync : std_logic;
+signal next_v_sync , next_h_sync : std_logic;
+signal h_end , v_end , pixel_tick: std_logic;
 begin
--- registers
 process (clk,reset)
 begin
-if reset='1' then
-mod2_reg <= '0';
-v_count_reg <= (others=>'0');
-h_count_reg <= (others=>'0');
-v_sync_reg <= '0';
-h_sync_reg <= '0';
-elsif (clk'event and clk='1') then
-mod2_reg <= mod2_next;
-v_count_reg <= v_count_next;
-h_count_reg <= h_count_next;
-v_sync_reg <= v_sync_next;
-h_sync_reg <= h_sync_next;
-end if;
+if (reset = '1') then
+current_mod2 <= '0';
+current_v_count <= (others=>'0');
+current_h_count <= (others=>'0');
+current_v_sync <= '0';
+current_h_sync <= '0';
+elsif (clk'event and clk = '1') then
+current_mod2 <= next_mod2 ;
+current_v_count <= next_v_count;
+current_h_count <= next_h_count;
+current_v_sync <= next_v_sync ;
+current_h_sync <= next_h_sync ;
+end if ;
 end process;
--- mod-2 circuit to generate 25 MHz enable tick
-mod2_next <= not mod2_reg;
--- 25 MHz pixel tick
-pixel_tick <= '1' when mod2_reg='1' else '0';
--- status
-h_end <= -- end of horizontal counter
-'1' when h_count_reg=(S_HD+S_HF+S_Hb+S_HR-1) else --799
+next_mod2 <= not current_mod2;
+pixel_tick <= '1' when current_mod2='1' else '0';
+h_end <= '1' when current_h_count=(HD+HF+HB+HR - 1) else --799
 '0';
-v_end <= -- end of vertical counter
-'1' when v_count_reg=(S_VD+S_VF+S_VB+S_VR-1) else --524
+v_end <= '1' when current_v_count=(VD+VF+VB+VR - 1) else --524
 '0';
--- mod-800 horizontal sync counter
-process (h_count_reg,h_end,pixel_tick)
+process (current_h_count,h_end,pixel_tick)
 begin
-if pixel_tick='1' then -- 25 MHz tick
+if pixel_tick = '1' then
 if h_end='1' then
-h_count_next <= (others=>'0');
+next_h_count <= (others=>'0');
 else
-h_count_next <= h_count_reg + 1;
-end if;
+next_h_count <= current_h_count + 1;
+end if ;
 else
-h_count_next <= h_count_reg;
-end if;
+next_h_count <= current_h_count;
+end if ;
 end process;
--- mod-525 vertical sync counter
-process (v_count_reg,h_end,v_end,pixel_tick)
+process (current_v_count,h_end,v_end,pixel_tick)
 begin
 if pixel_tick='1' and h_end='1' then
 if (v_end='1') then
-v_count_next <= (others=>'0');
+next_v_count <= (others=>'0');
 else
-v_count_next <= v_count_reg + 1;
-end if;
+next_v_count <= current_v_count + 1;
+end if ;
 else
-v_count_next <= v_count_reg;
-end if;
+next_v_count <= current_v_count;
+end if ;
 end process;
--- horizontal and vertical sync, buffered to avoid glitch
-h_sync_next <=
-'1' when (h_count_reg>=(S_HD+S_HF)) --656
-and (h_count_reg<=(S_HD+S_HF+S_HR-1)) else --751
+next_h_sync <= '1' when (current_h_count >=(HD+HF)) --656
+and (current_h_count<=(HD+HF+HR-1)) else --751
 '0';
-v_sync_next <=
-'1' when (v_count_reg>=(S_VD+S_VF)) --490
-and (v_count_reg<=(S_VD+S_VF+S_VR-1)) else --491
+video_on <= '1' when (current_h_count<HD) and
+(current_v_count<VD) else
 '0';
--- video on/off
-video_on <=
-'1' when (h_count_reg<S_HD) and (v_count_reg<S_VD) else
+next_v_sync <= '1' when ( current_v_count >= ( VD+VF ) ) --490
+and (current_v_count<=(VD+VF+VR-1)) else --491
 '0';
--- output signal
-hsync <= h_sync_reg;
-vsync <= v_sync_reg;
-pixel_x <= std_logic_vector(h_count_reg);
-pixel_y <= std_logic_vector(v_count_reg);
-p_tick <= pixel_tick;
+hsync <= current_h_sync;
+vsync <= current_v_sync;
+pixel_x <= std_logic_vector(current_h_count);
+pixel_y <= std_logic_vector(current_v_count);
 end arch;
