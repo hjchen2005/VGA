@@ -35,7 +35,7 @@ begin
 --y <= y + disp;
 --elsif(L = '0' and R = '1' and U = '1' and D = '0') then
 --x <= x + disp;
-y <= y - disp;
+--y <= y - disp;
 --elsif(L = '0' and R = '1' and U = '0' and D = '1') then
 --x <= x + disp;
 --y <= y + disp;
